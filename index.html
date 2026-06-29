@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Solana Token Safety Checker — by Daffa Haidar</title>
+<meta name="description" content="Paste any Solana SPL token mint address and get an instant on-chain safety read: mint authority, freeze authority, token program, and holder concentration. No wallet, no backend, no tracking.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0a0a0c;--surface:#141417;--surface-2:#1c1c20;--border:rgba(255,255,255,0.08);
+    --text:#ededf0;--muted:rgba(237,237,240,0.56);--dim:rgba(237,237,240,0.36);
+    --accent:#2dd4bf;--accent-dim:rgba(45,212,191,0.12);
+    --ok:#34d399;--ok-bg:rgba(52,211,153,0.1);
+    --warn:#fbbf24;--warn-bg:rgba(251,191,36,0.1);
+    --bad:#f87171;--bad-bg:rgba(248,113,113,0.1);
+    --mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  html{font-family:Geist,system-ui,sans-serif;font-size:16px;line-height:1.6;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+  body{min-height:100dvh;display:flex;flex-direction:column}
+  body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse 70% 50% at 50% -10%,rgba(45,212,191,0.06),transparent 60%)}
+
+  .wrap{width:100%;max-width:680px;margin:0 auto;padding:0 20px;flex:1}
+  header{padding:56px 0 32px;text-align:center}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(45,212,191,0.2);padding:5px 13px;border-radius:9999px;margin-bottom:18px}
+  .badge .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  h1{font-size:clamp(26px,5vw,38px);font-weight:700;letter-spacing:-0.03em;line-height:1.1;margin-bottom:12px}
+  header p{font-size:15px;color:var(--muted);max-width:440px;margin:0 auto}
+
+  .search{display:flex;gap:10px;margin:8px 0 14px}
+  .search input{flex:1;font-family:var(--mono);font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;outline:none;transition:border-color .2s,box-shadow .2s;min-width:0}
+  .search input::placeholder{color:var(--dim)}
+  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+  .search button{flex-shrink:0;font-family:inherit;font-size:15px;font-weight:600;color:#04211d;background:var(--accent);border:none;border-radius:12px;padding:0 24px;min-height:50px;cursor:pointer;transition:transform .15s,opacity .2s}
+  .search button:hover{transform:translateY(-1px)}
+  .search button:active{transform:translateY(0) scale(.98)}
+  .search button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+  .examples{font-size:13px;color:var(--dim);text-align:center;margin-bottom:8px}
+  .examples button{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:3px 9px;margin:0 3px;cursor:pointer;transition:color .2s,border-color .2s}
+  .examples button:hover{color:var(--accent);border-color:var(--accent)}
+
+  .msg{text-align:center;padding:18px;border-radius:12px;font-size:14px;margin-top:16px}
+  .msg.err{color:var(--bad);background:var(--bad-bg);border:1px solid rgba(248,113,113,0.2)}
+  .msg.loading{color:var(--muted)}
+  .spinner{display:inline-block;width:15px;height:15px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .result{margin-top:24px;animation:rise .4s cubic-bezier(.16,1,.3,1)}
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+  .identity{display:flex;align-items:center;gap:14px;padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:14px}
+  .identity img,.identity .ph{width:48px;height:48px;border-radius:12px;flex-shrink:0;object-fit:cover;background:var(--surface-2)}
+  .identity .ph{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:18px}
+  .identity .name{font-size:18px;font-weight:600;line-height:1.2}
+  .identity .sym{font-size:13px;color:var(--muted)}
+  .identity .mint{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px;word-break:break-all}
+
+  .verdict{text-align:center;padding:26px 20px;border-radius:16px;margin-bottom:14px;border:1px solid}
+  .verdict.go{background:var(--ok-bg);border-color:rgba(52,211,153,0.25)}
+  .verdict.caution{background:var(--warn-bg);border-color:rgba(251,191,36,0.25)}
+  .verdict.stop{background:var(--bad-bg);border-color:rgba(248,113,113,0.25)}
+  .verdict .label{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px}
+  .verdict.go .label{color:var(--ok)}.verdict.caution .label{color:var(--warn)}.verdict.stop .label{color:var(--bad)}
+  .verdict .score{font-size:40px;font-weight:700;letter-spacing:-0.02em;font-family:var(--mono)}
+  .verdict .reason{font-size:14px;color:var(--muted);margin-top:6px;max-width:420px;margin-left:auto;margin-right:auto}
+
+  .checks{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+  .check{display:flex;align-items:flex-start;gap:12px;padding:15px 18px;border-bottom:1px solid var(--border)}
+  .check:last-child{border-bottom:none}
+  .check .ic{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;margin-top:1px}
+  .check.ok .ic{background:var(--ok-bg);color:var(--ok)}
+  .check.warn .ic{background:var(--warn-bg);color:var(--warn)}
+  .check.bad .ic{background:var(--bad-bg);color:var(--bad)}
+  .check.info .ic{background:var(--surface-2);color:var(--muted)}
+  .check .body{flex:1;min-width:0}
+  .check .t{font-size:14px;font-weight:500}
+  .check .d{font-size:13px;color:var(--muted);margin-top:2px}
+  .check .d code{font-family:var(--mono);font-size:12px;color:var(--dim);word-break:break-all}
+
+  .disclaimer{font-size:12px;color:var(--dim);text-align:center;margin:18px auto 0;max-width:520px;line-height:1.5}
+
+  footer{padding:36px 20px 28px;text-align:center;font-size:13px;color:var(--dim)}
+  footer a{color:var(--accent);text-decoration:none;opacity:.85}
+  footer a:hover{opacity:1}
+
+  @media(max-width:540px){
+    header{padding:40px 0 24px}
+    .search{flex-direction:column}
+    .search button{padding:14px;min-height:48px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="badge"><span class="dot"></span>On-chain · no wallet · no tracking</span>
+    <h1>Solana Token Safety Checker</h1>
+    <p>Paste any SPL token mint address. Get an instant read on the authorities that actually let a dev rug you.</p>
+  </header>
+
+  <div class="search">
+    <input id="addr" type="text" inputmode="text" autocomplete="off" spellcheck="false"
+           placeholder="Token mint address (e.g. EPjFW...TDt1v)" aria-label="Token mint address">
+    <button id="scan">Scan</button>
+  </div>
+  <div class="examples">
+    Try:
+    <button data-mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v">USDC</button>
+    <button data-mint="So11111111111111111111111111111111111111112">wSOL</button>
+    <button data-mint="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263">BONK</button>
+  </div>
+
+  <div id="out"></div>
+
+  <p class="disclaimer">This is a structural on-chain check, not financial advice and not a full audit. A clean authority report does not guarantee a token is safe. Always do your own research.</p>
+</div>
+
+<footer>
+  Built by <a href="https://haidarwrite.tech" target="_blank" rel="noopener">Daffa Haidar</a>
+  · <a href="https://github.com/daffhaidar" target="_blank" rel="noopener">GitHub</a>
+  · Data from Solana RPC &amp; Jupiter
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
